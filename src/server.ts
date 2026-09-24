@@ -18,6 +18,7 @@ await app.register(helmet, { contentSecurityPolicy: false });
 await app.register(cors, { origin, credentials: false });
 await app.register(rateLimit, { max: 60, timeWindow: '1 minute' });
 
+app.get('/', async () => ({ ok: true, service: 'gartic-online', health: '/health' }));
 app.get('/health', async () => ({ ok: true, service: 'gartic-online', time: new Date().toISOString() }));
 app.post('/v1/session/anonymous', async (request, reply) => {
   try {
