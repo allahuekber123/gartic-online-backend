@@ -6,7 +6,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { z } from 'zod';
 import { parseIdentity } from './identity.js';
 import { hashIdentity, signSession, verifySession } from './security.js';
-import { ensureRoom, joinRoom, leaveRoom, saveMessage, upsertIdentity } from './store.js';
+import { ensureRoom, joinRoom, leaveRoom, listMessages, saveMessage, upsertIdentity } from './store.js';
 
 const app = Fastify({ logger: true, trustProxy: true });
 const port = Number(process.env.PORT ?? 8787);
@@ -50,7 +50,8 @@ io.on('connection', async (socket) => {
   const roomDbId = await ensureRoom(claims.roomId);
   await joinRoom(roomDbId, claims.sub);
   await socket.join(roomKey);
-  socket.emit('room:ready', { roomId: claims.roomId });
+  socket.emit('room:ready', { roomId: claims.roomId, history: await listMessages(roomDbId) });
+  socket.to(roomKey).emit('room:presence', { type: 'join', userId: claims.sub, nickname: socket.data.nickname });
   socket.on('identity:confirm', (proof: unknown) => {
     const candidate = z.object({ roomId: z.string().min(1), userId: z.string().min(1), nickname: z.string().min(1) }).safeParse(proof);
     if (!candidate.success || candidate.data.roomId !== claims.roomId || hashIdentity([candidate.data.roomId, candidate.data.userId, candidate.data.nickname]) !== (socket.data.claims as { identityHash: string }).identityHash) {
@@ -70,7 +71,11 @@ io.on('connection', async (socket) => {
     io.to(roomKey).emit('chat:message', message);
     callback?.({ ok: true, id: message.id });
   });
-  socket.on('disconnect', async () => { socketRate.delete(socket.id); await leaveRoom(roomDbId, claims.sub); });
+  socket.on('disconnect', async () => {
+    socketRate.delete(socket.id);
+    await leaveRoom(roomDbId, claims.sub);
+    socket.to(roomKey).emit('room:leave', { userId: claims.sub });
+  });
 });
 
 await app.listen({ port, host: '0.0.0.0' });
