@@ -45,4 +45,15 @@ export async function saveMessage(roomDbId: string, userId: string, nickname: st
   return { id: result.rows[0]!.id, roomId: roomDbId, senderId: userId, nickname, avatar, body, createdAt: result.rows[0]!.created_at.toISOString() };
 }
 
+export async function listMessages(roomDbId: string, limit = 80): Promise<ChatMessage[]> {
+  if (!pool) return memoryMessages.filter((message) => message.roomId === roomDbId).slice(-limit);
+  const result = await pool.query<{ id: string; sender_id: string; body: string; created_at: Date; nickname: string; avatar?: string }>(
+    `SELECT m.id,m.sender_id,m.body,m.created_at,u.nickname,u.avatar
+       FROM messages m JOIN app_users u ON u.id=m.sender_id
+      WHERE m.room_id=$1 ORDER BY m.created_at DESC LIMIT $2`,
+    [roomDbId, limit],
+  );
+  return result.rows.reverse().map((row) => ({ id: row.id, roomId: roomDbId, senderId: row.sender_id, nickname: row.nickname, avatar: row.avatar, body: row.body, createdAt: row.created_at.toISOString() }));
+}
+
 export async function close() { await pool?.end(); }
