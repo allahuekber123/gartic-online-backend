@@ -14,6 +14,7 @@ export type SessionClaims = {
   identityHash: string;
   nickname: string;
   avatar?: string;
+  isAdmin?: boolean;
   iat: number;
   exp: number;
   nonce: string;
@@ -25,6 +26,7 @@ export type ChatMessage = {
   senderId: string;
   nickname: string;
   avatar?: string;
+  isAdmin?: boolean;
   body: string;
   createdAt: string;
 };
