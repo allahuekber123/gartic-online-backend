@@ -31,8 +31,26 @@ export async function joinRoom(roomDbId: string, userId: string) {
 }
 
 export async function leaveRoom(roomDbId: string, userId: string) {
-  if (!pool) return;
-  await pool.query(`UPDATE room_memberships SET left_at=now() WHERE room_id=$1 AND user_id=$2`, [roomDbId, userId]);
+  if (!pool) {
+    for (let index = memoryMessages.length - 1; index >= 0; index -= 1) {
+      if (memoryMessages[index]?.roomId === roomDbId) memoryMessages.splice(index, 1);
+    }
+    return;
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT id FROM rooms WHERE id=$1 FOR UPDATE`, [roomDbId]);
+    await client.query(`UPDATE room_memberships SET left_at=now() WHERE room_id=$1 AND user_id=$2`, [roomDbId, userId]);
+    const active = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM room_memberships WHERE room_id=$1 AND left_at IS NULL`, [roomDbId]);
+    if (active.rows[0]?.count === '0') await client.query(`DELETE FROM messages WHERE room_id=$1`, [roomDbId]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function saveMessage(roomDbId: string, userId: string, nickname: string, avatar: string | undefined, body: string): Promise<ChatMessage> {
