@@ -7,7 +7,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { z } from 'zod';
 import { parseIdentity } from './identity.js';
 import { hashIdentity, signSession, verifySession } from './security.js';
-import { ensureRoom, joinRoom, leaveRoom, listMessages, saveMessage, upsertIdentity } from './store.js';
+import { ensureRoom, joinRoom, leaveRoom, saveMessage, upsertIdentity } from './store.js';
 
 const app = Fastify({ logger: true, trustProxy: true });
 const port = Number(process.env.PORT ?? 8787);
@@ -71,7 +71,8 @@ io.on('connection', async (socket) => {
     const peerClaims = peer?.data.claims as { isAdmin?: boolean } | undefined;
     return { userId: peer?.data.userId, nickname: peer?.data.nickname, isAdmin: Boolean(peerClaims?.isAdmin) };
   });
-  socket.emit('room:ready', { roomId: claims.roomId, history: await listMessages(roomDbId), members, user: { id: claims.sub, nickname: socket.data.nickname, isAdmin: Boolean((socket.data.claims as { isAdmin?: boolean }).isAdmin) } });
+  // Oda sohbeti geçici oturumdur: yeniden giren kullanıcı eski mesajları görmez.
+  socket.emit('room:ready', { roomId: claims.roomId, history: [], members, user: { id: claims.sub, nickname: socket.data.nickname, isAdmin: Boolean((socket.data.claims as { isAdmin?: boolean }).isAdmin) } });
   socket.to(roomKey).emit('room:presence', { type: 'join', userId: claims.sub, nickname: socket.data.nickname, isAdmin: Boolean((socket.data.claims as { isAdmin?: boolean }).isAdmin) });
   socket.on('identity:confirm', (proof: unknown) => {
     const candidate = z.object({ roomId: z.string().min(1), userId: z.string().min(1), nickname: z.string().min(1) }).safeParse(proof);
